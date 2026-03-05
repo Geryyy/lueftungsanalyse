@@ -55,11 +55,12 @@ def main():
     plots.plot_temperature(hourly, f"{OUTPUT_DIR}/01_temperatur_tagesgang.png")
     plots.plot_relative_humidity(hourly, f"{OUTPUT_DIR}/02_relative_feuchte_tagesgang.png")
     plots.plot_absolute_humidity(hourly, f"{OUTPUT_DIR}/03_absolute_feuchte_tagesgang.png")
-    plots.plot_ventilation_probability(hourly, f"{OUTPUT_DIR}/04_lueftungswahrscheinlichkeit.png")
+    plots.plot_ventilation_probability(df, f"{OUTPUT_DIR}/04_lueftungswahrscheinlichkeit.png")
     plots.plot_heatmap(df, f"{OUTPUT_DIR}/05_heatmap_stunde_monat.png")
     plots.plot_absolute_humidity_variance(df, f"{OUTPUT_DIR}/06_absolute_feuchte_varianz.png")
     plots.plot_daily_absolute_humidity(raw_df, f"{OUTPUT_DIR}/07_absolute_feuchte_tagesverlauf_apr_sep.png")
     plots.plot_daily_min_absolute_humidity(raw_df, f"{OUTPUT_DIR}/08_tagesminimum_absolute_feuchte_apr_sep.png")
+    plots.plot_daily_ventilation_probability(raw_df, f"{OUTPUT_DIR}/09_lueftungswahrscheinlichkeit_apr_sep.png")
 
     print(f"\nFertig. Diagramme in '{OUTPUT_DIR}/'.")
 

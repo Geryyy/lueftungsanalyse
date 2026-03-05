@@ -103,15 +103,78 @@ def plot_absolute_humidity_variance(df: pd.DataFrame, filename: str | None = Non
     _save_or_show(fig, filename)
 
 
-def plot_ventilation_probability(hourly: pd.DataFrame, filename: str | None = None):
-    fig, ax = plt.subplots(figsize=(9, 4))
-    bars = ax.bar(hourly.index, hourly["ventilation_prob"] * 100, color="mediumseagreen", edgecolor="white")
+def plot_ventilation_probability(df: pd.DataFrame, filename: str | None = None):
+    """Lüftungswahrscheinlichkeit pro Stunde für drei Keller-RH-Stufen (überlagerte Linien)."""
+    cellar_rh_levels = [70, 80, 90]
+    colors = ["green", "goldenrod", "red"]
+
+    fig, ax = plt.subplots(figsize=(10, 4))
+    for rh, color in zip(cellar_rh_levels, colors):
+        cellar_ah = absolute_humidity(config.CELLAR_TEMP, rh)
+        prob = (df.assign(vp=df["ah_outside"] < cellar_ah)
+                  .groupby("hour")["vp"].mean() * 100)
+        ax.plot(prob.index, prob.values, marker="o", linewidth=2, color=color,
+                label=f"Keller {config.CELLAR_TEMP} °C / {rh} % RH ({cellar_ah:.1f} g/m³)")
+
     ax.set_xlabel("Stunde")
     ax.set_ylabel("Wahrscheinlichkeit (%)")
-    ax.set_title("Wahrscheinlichkeit für sinnvolles Lüften pro Stunde")
+    ax.set_title("Wahrscheinlichkeit für sinnvolles Lüften pro Stunde (Sommermonate)")
     ax.set_ylim(0, 100)
     ax.xaxis.set_major_locator(mticker.MultipleLocator(2))
-    ax.set_xlim(-0.5, 23.5)
+    ax.set_xlim(0, 23)
+    ax.legend(fontsize=8)
+    _save_or_show(fig, filename)
+
+
+def plot_daily_ventilation_probability(raw_df: pd.DataFrame, filename: str | None = None):
+    """Anteil der Jahre, in denen das Tagesminimum der AH die Kellerschwelle unterschreitet.
+
+    X-Achse: Kalendertag Apr–Sep
+    Y-Achse: Wahrscheinlichkeit (%), dass an diesem Tag Lüften möglich wäre
+    Drei Linien für Keller-RH 70 / 80 / 90 %
+    """
+    months = [4, 5, 6, 7, 8, 9]
+    month_labels = {4: "Apr", 5: "Mai", 6: "Jun", 7: "Jul", 8: "Aug", 9: "Sep"}
+    cellar_rh_levels = [70, 80, 90]
+    colors = ["green", "goldenrod", "red"]
+    ref_year = 2001
+
+    df = raw_df.copy()
+    df["month"] = df["timestamp"].dt.month
+    df["day"] = df["timestamp"].dt.day
+    df["year"] = df["timestamp"].dt.year
+    df = df[df["month"].isin(months)].copy()
+    df["ah"] = absolute_humidity(df["temperature"], df["relative_humidity"])
+    daily_min = df.groupby(["year", "month", "day"])["ah"].min().reset_index()
+
+    fig, ax = plt.subplots(figsize=(13, 5))
+
+    for rh, color in zip(cellar_rh_levels, colors):
+        cellar_ah = absolute_humidity(config.CELLAR_TEMP, rh)
+        daily_min["possible"] = daily_min["ah"] < cellar_ah
+        prob = daily_min.groupby(["month", "day"])["possible"].mean().reset_index()
+        prob["date"] = pd.to_datetime(
+            prob[["day", "month"]].assign(year=ref_year)[["year", "month", "day"]]
+        )
+        prob = prob.sort_values("date")
+        ax.plot(prob["date"], prob["possible"] * 100, linewidth=2, color=color,
+                label=f"Keller {config.CELLAR_TEMP} °C / {rh} % RH ({cellar_ah:.1f} g/m³)")
+
+    for month in months:
+        boundary = pd.Timestamp(year=ref_year, month=month, day=1)
+        ax.axvline(boundary, color="gray", linewidth=0.7, linestyle=":")
+        ax.text(boundary, 102, month_labels[month], fontsize=8, color="gray", ha="left", va="bottom")
+
+    ax.xaxis.set_major_locator(mdates.MonthLocator())
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%b"))
+    ax.set_xlabel("Kalendertag")
+    ax.set_ylabel("Wahrscheinlichkeit (%)")
+    ax.set_title(f"Wahrscheinlichkeit Lüften möglich (Tagesminimum AH < Keller-AH) – Apr–Sep "
+                 f"({raw_df['timestamp'].dt.year.min()}–{raw_df['timestamp'].dt.year.max()})")
+    ax.set_ylim(0, 110)
+    ax.legend(fontsize=8)
+    ax.set_xlim(pd.Timestamp(year=ref_year, month=4, day=1),
+                pd.Timestamp(year=ref_year, month=9, day=30))
     _save_or_show(fig, filename)
 
 
