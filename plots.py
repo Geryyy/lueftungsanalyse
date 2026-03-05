@@ -190,6 +190,76 @@ def plot_daily_absolute_humidity(raw_df: pd.DataFrame, filename: str | None = No
     _save_or_show(fig, filename)
 
 
+def plot_daily_min_absolute_humidity(raw_df: pd.DataFrame, filename: str | None = None):
+    """Tägliches Minimum der absoluten Feuchte (Apr–Sep), gemittelt über alle Jahre.
+
+    Zeigt, ob an einem gegebenen Kalendertag Lüften überhaupt möglich wäre.
+    """
+    months = [4, 5, 6, 7, 8, 9]
+    month_labels = {4: "Apr", 5: "Mai", 6: "Jun", 7: "Jul", 8: "Aug", 9: "Sep"}
+
+    df = raw_df.copy()
+    df["month"] = df["timestamp"].dt.month
+    df["day"] = df["timestamp"].dt.day
+    df["year"] = df["timestamp"].dt.year
+    df = df[df["month"].isin(months)].copy()
+    df["ah"] = absolute_humidity(df["temperature"], df["relative_humidity"])
+
+    # Tagesminimum der AH pro Jahr und Kalendertag
+    daily_min = df.groupby(["year", "month", "day"])["ah"].min().reset_index()
+
+    # Statistik des Tagesminimums über alle Jahre
+    stats = daily_min.groupby(["month", "day"])["ah"].agg(
+        mean="mean",
+        std="std",
+        p10=lambda x: x.quantile(0.10),
+        p25=lambda x: x.quantile(0.25),
+        p75=lambda x: x.quantile(0.75),
+        p90=lambda x: x.quantile(0.90),
+    ).reset_index()
+
+    ref_year = 2001
+    stats["date"] = pd.to_datetime(
+        stats[["day", "month"]].assign(year=ref_year)[["year", "month", "day"]]
+    )
+    stats = stats.sort_values("date").reset_index(drop=True)
+    x = stats["date"]
+
+    fig, ax = plt.subplots(figsize=(13, 5))
+
+    ax.fill_between(x, stats["p10"], stats["p90"],
+                    alpha=0.15, color="steelblue", label="10.–90. Perzentile")
+    ax.fill_between(x, stats["p25"], stats["p75"],
+                    alpha=0.30, color="steelblue", label="25.–75. Perzentile (IQR)")
+    ax.fill_between(x, stats["mean"] - stats["std"], stats["mean"] + stats["std"],
+                    alpha=0.20, color="navy", label="Mittelwert ± 1σ")
+    ax.plot(x, stats["mean"], color="steelblue", linewidth=2, label="Mittelwert Tagesminimum")
+
+    cellar_rh_levels = [70, 80, 90]
+    cellar_colors = ["green", "goldenrod", "red"]
+    for rh, color in zip(cellar_rh_levels, cellar_colors):
+        ah = absolute_humidity(config.CELLAR_TEMP, rh)
+        ax.axhline(ah, color=color, linestyle="--", linewidth=1.5,
+                   label=f"Keller {config.CELLAR_TEMP} °C / {rh} % RH = {ah:.1f} g/m³")
+
+    for month in months:
+        boundary = pd.Timestamp(year=ref_year, month=month, day=1)
+        ax.axvline(boundary, color="gray", linewidth=0.7, linestyle=":")
+        ax.text(boundary, ax.get_ylim()[1] if ax.get_ylim()[1] > 0 else 20,
+                month_labels[month], fontsize=8, color="gray", ha="left", va="top")
+
+    ax.xaxis.set_major_locator(mdates.MonthLocator())
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%b"))
+    ax.set_xlabel("Kalendertag")
+    ax.set_ylabel("Absolute Feuchte (g/m³)")
+    ax.set_title(f"Tagesminimum Absolute Feuchte – Apr–Sep "
+                 f"(gemittelt {raw_df['timestamp'].dt.year.min()}–"
+                 f"{raw_df['timestamp'].dt.year.max()})")
+    ax.legend(loc="upper left", fontsize=8)
+    ax.set_xlim(x.iloc[0], x.iloc[-1])
+    _save_or_show(fig, filename)
+
+
 def plot_heatmap(df: pd.DataFrame, filename: str | None = None):
     """Heatmap: Lüftungswahrscheinlichkeit nach Stunde × Monat."""
     pivot = df.groupby(["month", "hour"])["ventilation_possible"].mean().unstack("hour") * 100
